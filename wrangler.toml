@@ -1,0 +1,3 @@
+name = "thisonesforjohn"
+main = "worker/worker.js"
+compatibility_date = "2025-12-17"
