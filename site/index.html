@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NFL Wins Pool</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+    h1 { margin: 0 0 8px 0; }
+    .meta { color: #555; margin-bottom: 16px; }
+    table { border-collapse: collapse; width: 100%; max-width: 980px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #fff; }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid #ccc; border-radius: 999px; margin: 2px 6px 2px 0; }
+    .small { font-size: 12px; color: #666; }
+    .error { color: #b00020; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 980px;}
+    @media (min-width: 900px){ .grid{ grid-template-columns: 1.4fr 1fr; } }
+    .card { border: 1px solid #e5e5e5; border-radius: 14px; padding: 14px; }
+  </style>
+</head>
+<body>
+  <h1>2025 NFL Wins Pool</h1>
+  <div class="meta">
+    Wins = 1 point • Ties/Losses = 0 • Regular season only • Times in America/Chicago
+  </div>
+
+  <div id="status" class="small">Loading…</div>
+
+  <div class="grid">
+    <div class="card">
+      <h2 style="margin:0 0 10px 0;font-size:18px;">Standings</h2>
+      <table id="standings">
+        <thead>
+          <tr><th>Rank</th><th>Owner</th><th>Total Wins</th><th>Teams</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="small" style="margin-top:10px;">
+        Tip: bookmark this page. It should auto-refresh on load and cache results for speed.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px 0;font-size:18px;">Weekly matchup grid</h2>
+      <div class="small" style="margin-bottom:10px;">
+        Shows all NFL games where at least one team is owned (games between two unowned teams are hidden).
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+        <label class="small" for="weekSelect"><strong>Week</strong></label>
+        <select id="weekSelect"></select>
+        <span id="weekMeta" class="small"></span>
+      </div>
+      <table id="weekGrid">
+        <thead>
+          <tr>
+            <th>Kickoff (CT)</th>
+            <th>Road Team</th>
+            <th>Home Team</th>
+            <th>Winner</th>
+            <th>Road Owner</th>
+            <th>Home Owner</th>
+            <th>Winning Owner</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <h2 style="margin:16px 0 10px 0;font-size:18px;">Unowned teams</h2>
+      <div id="unowned"></div>
+      <h2 style="margin:16px 0 10px 0;font-size:18px;">Data source</h2>
+      <div class="small">
+        Powered by ESPN public JSON endpoints (unofficial). If ESPN ever changes the format, we update the Worker.
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = (location.hostname.includes('localhost'))
+  ? 'http://127.0.0.1:8787'   // wrangler dev default
+  : ''; // same origin if you deploy Worker as Pages Function/Worker route
+
+async function main(){
+  const status = document.getElementById('status');
+  try{
+    const res = await fetch(API_BASE + '/api/standings', { cache: 'no-store' });
+    if(!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+
+    status.textContent = `Last updated: ${data.generated_at_ct} (cached for ${data.cache_ttl_minutes} min)`;
+
+    const tbody = document.querySelector('#standings tbody');
+    tbody.innerHTML = '';
+    data.standings.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td><strong>${row.owner}</strong></td>
+        <td><strong>${row.total_wins}</strong></td>
+        <td>${row.teams.map(t => `<span class="pill">${t.team}: <strong>${t.wins}</strong></span>`).join('')}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const unowned = document.getElementById('unowned');
+    unowned.innerHTML = data.unowned.map(t => `<span class="pill">${t.team}: <strong>${t.wins}</strong></span>`).join('') || '<span class="small">None</span>';
+
+    // Week selector
+    const weekSelect = document.getElementById('weekSelect');
+    weekSelect.innerHTML = '';
+    for(let w=1; w<=18; w++){
+      const opt = document.createElement('option');
+      opt.value = String(w);
+      opt.textContent = `Week ${w}`;
+      weekSelect.appendChild(opt);
+    }
+
+    // Load current week by default
+    const autoWeek = await fetchWeekGrid(null);
+    const current = autoWeek.currentWeek || 1;
+    weekSelect.value = String(current);
+    renderWeekGrid(autoWeek);
+
+    weekSelect.addEventListener('change', async () => {
+      const w = weekSelect.value;
+      const grid = await fetchWeekGrid(w);
+      renderWeekGrid(grid);
+    });
+
+  } catch(err){
+    status.innerHTML = `<span class="error">Failed to load standings: ${err.message}</span>`;
+  }
+}
+
+function formatKickoffCT(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    weekday: 'short',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(d);
+}
+
+async function fetchWeekGrid(week){
+  const url = new URL(API_BASE + '/api/week', location.origin);
+  if(week) url.searchParams.set('week', week);
+  const res = await fetch(url.toString(), { cache: 'no-store' });
+  if(!res.ok) throw new Error('Week API error ' + res.status);
+  return await res.json();
+}
+
+function renderWeekGrid(grid){
+  const meta = document.getElementById('weekMeta');
+  const tbody = document.querySelector('#weekGrid tbody');
+  tbody.innerHTML = '';
+
+  const range = grid.startDate ? `${grid.startDate.slice(0,10)} → ${grid.endDate.slice(0,10)}` : '';
+  meta.textContent = range ? `(schedule window: ${range}; current NFL week: ${grid.currentWeek ?? '?'})` : `(current NFL week: ${grid.currentWeek ?? '?'})`;
+
+  if(!grid.games || grid.games.length === 0){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="7" class="small">No games found for this week yet.</td>`;
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for(const g of grid.games){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="small">${formatKickoffCT(g.kickoff_utc)}</td>
+      <td>${g.away}</td>
+      <td>${g.home}</td>
+      <td><strong>${g.winner || '-'}</strong></td>
+      <td>${g.awayOwner}</td>
+      <td>${g.homeOwner}</td>
+      <td><strong>${g.winningOwner}</strong></td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+main();
+</script>
+</body>
+</html>

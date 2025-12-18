@@ -1,0 +1,60 @@
+{
+  "season": 2025,
+  "timezone": "America/Chicago",
+  "owners": {
+    "Commish": [
+      "Ravens",
+      "Cowboys",
+      "Jaguars"
+    ],
+    "Derek": [
+      "Commanders",
+      "Rams",
+      "Bears"
+    ],
+    "Foro": [
+      "Texans",
+      "Packers",
+      "Jets"
+    ],
+    "Joe Pa": [
+      "Lions",
+      "Vikings",
+      "Raiders"
+    ],
+    "John Lo": [
+      "Eagles",
+      "Dolphins",
+      "Browns"
+    ],
+    "Mr. Maas": [
+      "Chiefs",
+      "Steelers",
+      "Seahawks"
+    ],
+    "Papa Joe": [
+      "Bengals",
+      "Falcons",
+      "Giants"
+    ],
+    "Riley": [
+      "49ers",
+      "Patriots",
+      "Cardinals"
+    ],
+    "Slice": [
+      "Bills",
+      "Buccaneers",
+      "Panthers"
+    ],
+    "Spi": [
+      "Broncos",
+      "Chargers",
+      "Colts"
+    ]
+  },
+  "unowned": [
+    "Saints",
+    "Titans"
+  ]
+}
